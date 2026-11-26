@@ -1,0 +1,77 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash   # bash -eo pipefail: a failing command on the left of a pipe fails the step
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wcim_test
+          POSTGRES_PASSWORD: wcim_test_password
+          POSTGRES_DB: wcim_test
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U wcim_test -d wcim_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://wcim_test:wcim_test_password@localhost:55432/wcim_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Install (lockfile only)
+        run: npm ci
+      - name: psql available (DB harness needs it)
+        run: |
+          if ! command -v psql >/dev/null; then sudo apt-get update && sudo apt-get install -y postgresql-client; fi
+          psql --version
+      - name: Wait for PostgreSQL
+        run: |
+          for i in $(seq 1 30); do psql "$DATABASE_URL" -X -q -c 'select 1' >/dev/null 2>&1 && exit 0; sleep 1; done
+          echo "PostgreSQL not reachable"; exit 1
+      - name: Type-check
+        run: npm run typecheck
+      - name: Unit tests (no skips allowed)
+        run: |
+          npm test 2>&1 | tee "$RUNNER_TEMP/unit.log"
+          bash ci/assert-no-skips.sh "$RUNNER_TEMP/unit.log" 115
+      - name: Migrations - apply, constraint tests, rollback, re-apply
+        run: bash database/run-db-tests.sh 2>&1 | tee "$RUNNER_TEMP/db.log"
+      - name: PostgreSQL integration tests (no skips allowed)
+        run: |
+          npm run test:pgstore 2>&1 | tee "$RUNNER_TEMP/pg.log"
+          bash ci/assert-no-skips.sh "$RUNNER_TEMP/pg.log" 89
+      - name: Browser e2e (Playwright + real PostgreSQL)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e 2>&1 | tee "$RUNNER_TEMP/e2e.log"
+          grep -q "E2E PASSED" "$RUNNER_TEMP/e2e.log"
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: |
+            ${{ runner.temp }}/*.log
+            /tmp/wcim_dbtest_*.log
+          if-no-files-found: ignore

@@ -1,0 +1,29 @@
+# Render Blueprint (free plan). New > Blueprint > pick this repo. Free web services sleep after ~15 min idle (first request then takes ~1 min).
+services:
+  - type: web
+    name: olora-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci --include=dev --no-audit --no-fund   # `pg` is a devDependency (needs --include=dev). Lockfile regenerated in Slice 4 follow-up and verified with a clean `npm ci`.
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false            # paste the Supabase SESSION POOLER string in the Render dashboard (never commit it)
+      - key: DATABASE_SSL
+        value: no-verify       # TLS on, certificate not verified. Needed because pg treats sslmode=require as full verification and Supabase's CA is not in Node's trust store. See SETUP.md section 3.
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: "10000"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: CORS_ORIGINS
+        value: https://localhost,http://localhost,capacitor://localhost   # Capacitor Android/iOS WebView origins
+      - key: SUPABASE_URL
+        value: https://reazimolvvcatpirqqsk.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: sb_publishable_gKW4JAYDrlUc-h7_nh4WOA_Xuuphptw

@@ -1,0 +1,36 @@
+{
+  "name": "olora",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test \"apps/api/tests/*.test.ts\"",
+    "test:db": "bash database/run-db-tests.sh",
+    "test:pgstore": "bash database/run-pgstore-tests.sh",
+    "test:e2e": "bash apps/api/tests/e2e/run-e2e.sh",
+    "db:up": "docker compose -f docker-compose.test.yml up -d --wait",
+    "db:down": "docker compose -f docker-compose.test.yml down -v",
+    "test:all": "npm run typecheck && npm test && npm run test:db && npm run test:pgstore",
+    "build": "node scripts/build-web.mjs",
+    "start": "node apps/api/src/server/main.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "@types/node": "^22.0.0",
+    "pg": "^8.11.0",
+    "playwright": "^1.50.0",
+    "@types/pg": "^8.11.0"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/browser": "^8.0.0"
+  }
+}
